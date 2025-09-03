@@ -1,0 +1,14 @@
+[Unit]
+Description=MirrorMaker2
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment="JAVA_HOME={{ install_dir }}/java"
+ExecStart={{ install_dir }}/bin/kafka-mirror-maker.sh --consumer.config {{ install_dir }}/config/mm2-consumer.properties --producer.config {{ install_dir }}/config/mm2-producer.properties --whitelist '.*'
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

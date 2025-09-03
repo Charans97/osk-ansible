@@ -1,0 +1,32 @@
+# Kafka KRaft mode configuration
+process.roles=broker,controller
+node.id={{ node_id | default(inventory_hostname.split('kafka')[-1]) }}
+controller.listener.names=CONTROLLER
+
+listeners=PLAINTEXT://:9092,CONTROLLER://:9093{% if ssl.enabled | default(false) %},SSL://:9094{% endif %}
+
+listener.security.protocol.map=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT{% if ssl.enabled | default(false) %},SSL:SSL{% endif %}
+
+inter.broker.listener.name=PLAINTEXT
+
+# Voters list
+controller.quorum.voters={{ node_id | default(inventory_hostname.split('kafka')[-1]) }}@{{ ansible_host }}:9093
+
+# Advertised listeners
+advertised.listeners=PLAINTEXT://{{ ansible_host }}:9092{% if ssl.enabled | default(false) %},SSL://{{ ansible_host }}:9094{% endif %}
+
+log.dirs={{ install_dir }}/logs
+num.network.threads=3
+num.io.threads=8
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+# SSL config (optional)
+{% if ssl.enabled | default(false) %}
+ssl.keystore.location={{ install_dir }}/config/kafka.keystore.jks
+ssl.keystore.password={{ ssl.keystore_password | default('changeit') }}
+ssl.key.password={{ ssl.key_password | default('changeit') }}
+ssl.truststore.location={{ install_dir }}/config/kafka.truststore.jks
+ssl.truststore.password={{ ssl.truststore_password | default('changeit') }}
+{% endif %}

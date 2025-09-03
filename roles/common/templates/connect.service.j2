@@ -1,0 +1,14 @@
+[Unit]
+Description=Kafka Connect
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment="JAVA_HOME={{ install_dir }}/java"
+ExecStart={{ install_dir }}/bin/connect-distributed.sh {{ install_dir }}/config/connect.properties
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+install_dir: /opt/kafka
+java_package: ./roles/common/files/openjdk-17.tar.gz
+kafka_tarball: ./roles/common/files/kafka_2.13-3.7.2.tgz
+
+ssl:
+  enabled: true
+#  ca_password: "gini@321"
+ # keystore_password: "changeit"
+  #truststore_password: "changeit"

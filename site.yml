@@ -1,0 +1,15 @@
+---
+- hosts: brokers
+  become: yes
+  roles:
+    - common
+
+- hosts: connect
+  become: yes
+  roles:
+    - connect
+
+- hosts: mm2
+  become: yes
+  roles:
+    - mm2

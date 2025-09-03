@@ -1,0 +1,146 @@
+---
+# ---------------- Java Section ----------------
+- name: Ensure Java install directory exists
+  file:
+    path: "{{ install_dir }}/java"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Extract Java tarball
+  unarchive:
+    src: "{{ java_package }}"
+    dest: "{{ install_dir }}/java"
+    remote_src: no
+
+- name: Detect JDK directory
+  find:
+    paths: "{{ install_dir }}/java"
+    file_type: directory
+    patterns: "jdk-*"
+  register: jdk_dir
+
+- name: Set JAVA_HOME fact
+  set_fact:
+    java_home: "{{ jdk_dir.files[0].path }}"
+
+- name: Write JAVA_HOME and PATH to profile
+  copy:
+    dest: /etc/profile.d/java.sh
+    mode: 0755
+    content: |
+      export JAVA_HOME={{ java_home }}
+      export PATH=$JAVA_HOME/bin:$PATH
+
+# ---------------- Kafka Section ----------------
+- name: Create Kafka install dir
+  file:
+    path: "{{ install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Extract Kafka tarball
+  unarchive:
+    src: "{{ kafka_tarball }}"
+    dest: "{{ install_dir }}"
+    remote_src: no
+    extra_opts: [--strip-components=1]
+
+# ---------------- SSL Section ----------------
+- name: Copy CA files
+  copy:
+    src: "{{ item }}"
+    dest: "{{ install_dir }}/config/"
+    mode: 0600
+  with_items:
+    - ca.crt
+    - ca.key
+  when: ssl.enabled | default(false)
+
+- name: Cleanup old keystore/truststore
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ install_dir }}/config/kafka.keystore.jks"
+    - "{{ install_dir }}/config/kafka.truststore.jks"
+    - "{{ install_dir }}/config/kafka.csr"
+    - "{{ install_dir }}/config/cert-signed"
+    - "{{ install_dir }}/config/cert-file"
+  when: ssl.enabled | default(false)
+
+- name: Deploy SSL generation script
+  template:
+    src: ssl-generate.sh.j2
+    dest: "{{ install_dir }}/config/ssl-generate.sh"
+    mode: 0755
+  when: ssl.enabled | default(false)
+
+- name: Generate SSL keystore/truststore
+  command: "{{ install_dir }}/config/ssl-generate.sh"
+  environment:
+    JAVA_HOME: "{{ install_dir }}/java"
+  args:
+    chdir: "{{ install_dir }}/config"
+  when: ssl.enabled | default(false)
+
+
+# ---------------- Kafka Config Section ----------------
+- name: Configure Kafka server.properties
+  template:
+    src: server.properties.j2
+    dest: "{{ install_dir }}/config/server.properties"
+    mode: 0644
+  notify:
+    - restart kafka
+
+# ---------------- Systemd Section ----------------
+- name: Configure Kafka systemd service
+  template:
+    src: kafka.service.j2
+    dest: /etc/systemd/system/kafka.service
+    mode: 0644
+
+
+- name: Reload systemd
+  command: systemctl daemon-reload
+  become: yes
+
+#.......................clusterid............................
+
+- name: Generate cluster ID (first run only)
+  command: "{{ install_dir }}/bin/kafka-storage.sh random-uuid"
+  register: cluster_id
+  run_once: true
+  changed_when: false
+  environment:
+    JAVA_HOME: "{{ install_dir }}/java"
+
+- name: Set cluster ID fact
+  set_fact:
+    kafka_cluster_id: "{{ cluster_id.stdout }}"
+  run_once: true
+
+- name: Format Kafka storage directories
+  command: >
+    {{ install_dir }}/bin/kafka-storage.sh format
+    --ignore-formatted
+    --cluster-id {{ hostvars[groups['brokers'][0]].kafka_cluster_id }}
+    -c {{ install_dir }}/config/server.properties
+  args:
+    creates: "{{ install_dir }}/logs/meta.properties"
+  environment:
+    JAVA_HOME: "{{ install_dir }}/java"
+
+
+#.....................start kafka....................
+- name: Enable and start Kafka broker
+  systemd:
+    name: kafka
+    state: started
+    enabled: yes
+  become: yes
+

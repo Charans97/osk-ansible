@@ -1,0 +1,14 @@
+---
+- name: Deploy Kafka Connect systemd service
+  template:
+    src: connect.service.j2
+    dest: /etc/systemd/system/connect.service
+
+- name: Reload systemd
+  command: systemctl daemon-reexec
+
+- name: Enable and start Kafka Connect
+  systemd:
+    name: connect
+    state: started
+    enabled: yes

@@ -1,0 +1,14 @@
+---
+- name: Deploy Kafka MM2 systemd service
+  template:
+    src: mm2.service.j2
+    dest: /etc/systemd/system/mm2.service
+
+- name: Reload systemd
+  command: systemctl daemon-reexec
+
+- name: Enable and start Kafka MM2
+  systemd:
+    name: mm2
+    state: started
+    enabled: yes
