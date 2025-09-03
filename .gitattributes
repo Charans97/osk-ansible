@@ -1,0 +1,2 @@
+roles/common/files/openjdk-17.tar.gz filter=lfs diff=lfs merge=lfs -text
+roles/common/files/kafka_2.13-3.7.2.tgz filter=lfs diff=lfs merge=lfs -text
