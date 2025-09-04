@@ -82,10 +82,10 @@
 - name: Generate SSL keystore/truststore
   command: "{{ install_dir }}/config/ssl-generate.sh"
   environment:
-    JAVA_HOME: "{{ install_dir }}/java"
+    JAVA_HOME: "{{ java_home }}"
   args:
     chdir: "{{ install_dir }}/config"
-  when: ssl.enabled | default(false)
+  when: ssl_enabled | default(false)
 
 
 # ---------------- Kafka Config Section ----------------
@@ -104,37 +104,83 @@
     dest: /etc/systemd/system/kafka.service
     mode: 0644
 
-
 - name: Reload systemd
   command: systemctl daemon-reload
   become: yes
 
-#.......................clusterid............................
+# ---------------- Cluster ID & Storage Formatting ----------------
+# ---------------- Cluster ID & Storage Formatting ----------------
 
-- name: Generate cluster ID (first run only)
+- name: Check if cluster.id file exists
+  stat:
+    path: "{{ install_dir }}/cluster.id"
+  register: cluster_id_file_local
+
+# Generate cluster.id only once (on first broker)
+- name: Generate cluster.id
   command: "{{ install_dir }}/bin/kafka-storage.sh random-uuid"
-  register: cluster_id
+  register: new_cluster_id
   run_once: true
-  changed_when: false
-  environment:
-    JAVA_HOME: "{{ install_dir }}/java"
+  delegate_to: "{{ groups['brokers'][0] }}"
+  when: not cluster_id_file_local.stat.exists
+
+- name: Save cluster.id on first broker
+  copy:
+    dest: "{{ install_dir }}/cluster.id"
+    content: "{{ new_cluster_id.stdout }}"
+    mode: 0644
+  run_once: true
+  delegate_to: "{{ groups['brokers'][0] }}"
+  when: not cluster_id_file_local.stat.exists
+
+- name: Fetch cluster.id from first broker
+  slurp:
+    src: "{{ install_dir }}/cluster.id"
+  register: cluster_id_file_content
+  delegate_to: "{{ groups['brokers'][0] }}"
+  run_once: true
+
+- name: Distribute cluster.id to all brokers
+  copy:
+    dest: "{{ install_dir }}/cluster.id"
+    content: "{{ cluster_id_file_content.content | b64decode }}"
+    mode: 0644
 
 - name: Set cluster ID fact
   set_fact:
-    kafka_cluster_id: "{{ cluster_id.stdout }}"
-  run_once: true
+    cluster_id: "{{ cluster_id_file_content.content | b64decode }}"
 
+# Check if Kafka storage already formatted
+- name: Check if Kafka storage already formatted
+  stat:
+    path: "{{ install_dir }}/logs/meta.properties"
+  register: kafka_storage_meta
+
+# Wipe logs only if not formatted
+- name: Wipe existing Kafka log dirs
+  file:
+    path: "{{ install_dir }}/logs"
+    state: absent
+  when: not kafka_storage_meta.stat.exists
+
+- name: Recreate Kafka log dirs
+  file:
+    path: "{{ install_dir }}/logs"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+# Format storage with shared cluster.id
 - name: Format Kafka storage directories
   command: >
     {{ install_dir }}/bin/kafka-storage.sh format
     --ignore-formatted
-    --cluster-id {{ hostvars[groups['brokers'][0]].kafka_cluster_id }}
+    --cluster-id {{ cluster_id }}
     -c {{ install_dir }}/config/server.properties
-  args:
-    creates: "{{ install_dir }}/logs/meta.properties"
   environment:
-    JAVA_HOME: "{{ install_dir }}/java"
-
+    JAVA_HOME: "{{ java_home }}"
+  when: not kafka_storage_meta.stat.exists
 
 #.....................start kafka....................
 - name: Enable and start Kafka broker
@@ -143,4 +189,3 @@
     state: started
     enabled: yes
   become: yes
-
