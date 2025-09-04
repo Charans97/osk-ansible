@@ -1,4 +1,3 @@
----
 # ---------------- Java Section ----------------
 - name: Ensure Java install directory exists
   file:
@@ -83,10 +82,10 @@
   command: "{{ install_dir }}/config/ssl-generate.sh"
   environment:
     JAVA_HOME: "{{ java_home }}"
+    PATH: "{{ java_home }}/bin:{{ ansible_env.PATH }}"
   args:
     chdir: "{{ install_dir }}/config"
-  when: ssl_enabled | default(false)
-
+  when: ssl.enabled | default(false)
 
 # ---------------- Kafka Config Section ----------------
 - name: Configure Kafka server.properties
@@ -109,83 +108,74 @@
   become: yes
 
 # ---------------- Cluster ID & Storage Formatting ----------------
-# ---------------- Cluster ID & Storage Formatting ----------------
-
-- name: Check if cluster.id file exists
-  stat:
-    path: "{{ install_dir }}/cluster.id"
-  register: cluster_id_file_local
-
-# Generate cluster.id only once (on first broker)
-- name: Generate cluster.id
-  command: "{{ install_dir }}/bin/kafka-storage.sh random-uuid"
-  register: new_cluster_id
+- name: Generate cluster.id (only on kafka1)
+  command: >
+    /opt/kafka/bin/kafka-storage.sh random-uuid
+  environment:
+    JAVA_HOME: "{{ java_home }}"
+    PATH: "{{ java_home }}/bin:{{ ansible_env.PATH }}"
+  register: cluster_id_result
+  delegate_to: kafka1
   run_once: true
-  delegate_to: "{{ groups['brokers'][0] }}"
-  when: not cluster_id_file_local.stat.exists
 
-- name: Save cluster.id on first broker
+- name: Save cluster.id to controller node
   copy:
-    dest: "{{ install_dir }}/cluster.id"
-    content: "{{ new_cluster_id.stdout }}"
-    mode: 0644
-  run_once: true
-  delegate_to: "{{ groups['brokers'][0] }}"
-  when: not cluster_id_file_local.stat.exists
-
-- name: Fetch cluster.id from first broker
-  slurp:
-    src: "{{ install_dir }}/cluster.id"
-  register: cluster_id_file_content
-  delegate_to: "{{ groups['brokers'][0] }}"
+    content: "{{ cluster_id_result.stdout }}"
+    dest: "/tmp/kafka-cluster-id"
+  delegate_to: kafka1
   run_once: true
 
-- name: Distribute cluster.id to all brokers
+# 2. Fetch cluster.id from kafka1 to controller
+- name: Fetch cluster.id to Ansible controller
+  fetch:
+    src: "/tmp/kafka-cluster-id"
+    dest: "/tmp/kafka-cluster-id"
+    flat: yes
+  delegate_to: kafka1
+  run_once: true
+
+# 3. Distribute cluster.id to all brokers
+- name: Copy cluster.id to all brokers
   copy:
-    dest: "{{ install_dir }}/cluster.id"
-    content: "{{ cluster_id_file_content.content | b64decode }}"
-    mode: 0644
+    src: "/tmp/kafka-cluster-id"
+    dest: "/opt/kafka/cluster.id"
 
-- name: Set cluster ID fact
-  set_fact:
-    cluster_id: "{{ cluster_id_file_content.content | b64decode }}"
-
-# Check if Kafka storage already formatted
-- name: Check if Kafka storage already formatted
-  stat:
-    path: "{{ install_dir }}/logs/meta.properties"
-  register: kafka_storage_meta
-
-# Wipe logs only if not formatted
-- name: Wipe existing Kafka log dirs
+# 4. Clean old metadata (optional, only if mismatch happens)
+- name: Clean old Kafka metadata logs
   file:
     path: "{{ install_dir }}/logs"
     state: absent
-  when: not kafka_storage_meta.stat.exists
+  when: wipe_metadata | default(false)
 
-- name: Recreate Kafka log dirs
-  file:
-    path: "{{ install_dir }}/logs"
-    state: directory
-    owner: root
-    group: root
-    mode: 0755
+# 5. Format storage with shared cluster.id
+# 5a. Read cluster.id into a fact
+- name: Read cluster.id
+  slurp:
+    src: /opt/kafka/cluster.id
+  register: cluster_id_file
 
-# Format storage with shared cluster.id
+- name: Set cluster_id fact
+  set_fact:
+    cluster_id: "{{ cluster_id_file.content | b64decode | trim }}"
+
+# 5b. Format storage with shared cluster.id
 - name: Format Kafka storage directories
   command: >
-    {{ install_dir }}/bin/kafka-storage.sh format
+    /opt/kafka/bin/kafka-storage.sh format
     --ignore-formatted
     --cluster-id {{ cluster_id }}
-    -c {{ install_dir }}/config/server.properties
+    -c /opt/kafka/config/server.properties
+  args:
+    creates: "{{ install_dir }}/logs/__cluster_metadata-0"
   environment:
     JAVA_HOME: "{{ java_home }}"
-  when: not kafka_storage_meta.stat.exists
+    PATH: "{{ java_home }}/bin:{{ ansible_env.PATH }}"
 
-#.....................start kafka....................
+# ---------------- Start Kafka ----------------
 - name: Enable and start Kafka broker
   systemd:
     name: kafka
     state: started
     enabled: yes
   become: yes
+

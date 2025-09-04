@@ -1,14 +1,16 @@
 [Unit]
-Description=Apache Kafka Broker
+Description=Apache Kafka Broker (KRaft Mode)
 After=network.target
 
 [Service]
 Type=simple
 User=root
-Environment="JAVA_HOME={{ install_dir }}/java"
+Environment="JAVA_HOME={{ java_home }}"
+Environment="PATH={{ java_home }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 ExecStart={{ install_dir }}/bin/kafka-server-start.sh {{ install_dir }}/config/server.properties
 ExecStop={{ install_dir }}/bin/kafka-server-stop.sh
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
