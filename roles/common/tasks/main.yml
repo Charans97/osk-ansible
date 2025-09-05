@@ -179,3 +179,11 @@
     enabled: yes
   become: yes
 
+#..............connect............
+- name: Deploy Kafka Connect
+  include_tasks: connect.yml
+  when: kafka_role == "connect"
+#..............mm2................
+- name: Deploy Kafka MirrorMaker2
+  include_tasks: mm2.yml
+  when: kafka_role == "mm2"

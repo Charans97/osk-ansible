@@ -1,14 +1,79 @@
 ---
-- name: Deploy Kafka MM2 systemd service
+# ---------------- Java Section ----------------
+- name: Ensure Java install directory exists
+  file:
+    path: "{{ install_dir }}/java"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Extract Java tarball
+  unarchive:
+    src: "{{ java_package }}"
+    dest: "{{ install_dir }}/java"
+    remote_src: no
+
+- name: Detect JDK directory
+  find:
+    paths: "{{ install_dir }}/java"
+    file_type: directory
+    patterns: "jdk-*"
+  register: jdk_dir
+
+- name: Set JAVA_HOME fact
+  set_fact:
+    java_home: "{{ jdk_dir.files[0].path }}"
+
+- name: Write JAVA_HOME and PATH to profile
+  copy:
+    dest: /etc/profile.d/java.sh
+    mode: 0755
+    content: |
+      export JAVA_HOME={{ java_home }}
+      export PATH=$JAVA_HOME/bin:$PATH
+
+# ---------------- Kafka Section ----------------
+- name: Create Kafka install dir
+  file:
+    path: "{{ install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Extract Kafka tarball
+  unarchive:
+    src: "{{ kafka_tarball }}"
+    dest: "{{ install_dir }}"
+    remote_src: no
+    extra_opts: [--strip-components=1]
+
+#....................................................
+
+- name: Deploy Kafka MM2 properties
+  template:
+    src: mm2.properties.j2
+    dest: /opt/kafka/config/mm2.properties
+    owner: root
+    group: root
+    mode: 0644
+
+
+#......................................................
+- name: Deploy Kafka MirrorMaker2 systemd service
   template:
     src: mm2.service.j2
-    dest: /etc/systemd/system/mm2.service
+    dest: /etc/systemd/system/kafka-mm2.service
+    mode: 0644
+
 
 - name: Reload systemd
   command: systemctl daemon-reexec
 
 - name: Enable and start Kafka MM2
   systemd:
-    name: mm2
+    name: kafka-mm2
     state: started
     enabled: yes
+    daemon_reload: yes
