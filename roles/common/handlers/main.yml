@@ -5,3 +5,15 @@
     state: restarted
     daemon_reload: yes
   become: yes
+
+- name: restart connect
+  systemd:
+    name: kafka-connect
+    state: restarted
+    daemon_reload: yes
+
+- name: restart mm2
+  systemd:
+    name: kafka-mm2
+    state: restarted
+    daemon_reload: yes

@@ -1,0 +1,15 @@
+[Unit]
+Description=Apache Kafka Connect Distributed
+After=network.target kafka.service
+
+[Service]
+Type=simple
+User=root
+ExecStart={{ install_dir }}/bin/connect-distributed.sh {{ install_dir }}/config/connect-distributed.properties
+Restart=always
+RestartSec=10
+Environment="JAVA_HOME={{ java_home }}"
+Environment="KAFKA_HEAP_OPTS=-Xms1G -Xmx2G"
+
+[Install]
+WantedBy=multi-user.target

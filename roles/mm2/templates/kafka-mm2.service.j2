@@ -1,0 +1,15 @@
+[Unit]
+Description=MirrorMaker2
+After=network.target kafka.service
+
+[Service]
+Type=simple
+User=root
+Environment="JAVA_HOME={{ java_home }}"
+Environment="PATH={{ java_home }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/opt/kafka/bin/connect-distributed.sh /opt/kafka/config/mm2.properties
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

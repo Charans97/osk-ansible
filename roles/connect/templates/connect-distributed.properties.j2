@@ -1,0 +1,29 @@
+# Bootstrap servers (Kafka brokers)
+bootstrap.servers={% for host in groups['brokers'] %}{{ hostvars[host].ansible_host }}:9092{% if not loop.last %},{% endif %}{% endfor %}
+
+# Key converter (can be changed to Avro if Schema Registry is used)
+key.converter=org.apache.kafka.connect.json.JsonConverter
+key.converter.schemas.enable=false
+
+# Value converter
+value.converter=org.apache.kafka.connect.json.JsonConverter
+value.converter.schemas.enable=false
+
+# Internal topics
+offset.storage.topic=connect-offsets
+config.storage.topic=connect-configs
+status.storage.topic=connect-status
+
+# Replication factor for internal topics
+offset.storage.replication.factor=3
+config.storage.replication.factor=3
+status.storage.replication.factor=3
+
+# Group ID
+group.id=connect-cluster
+
+# REST API port
+rest.port=8083
+
+# Worker settings
+tasks.max=2
