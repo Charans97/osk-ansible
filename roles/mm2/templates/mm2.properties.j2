@@ -1,0 +1,16 @@
+# MM2 connects to local cluster
+clusters = {{ groups['brokers'] | map('extract', hostvars, ['ansible_host']) | join(',') }}
+
+# Example: replicate from clusterA → clusterB
+clusterA.bootstrap.servers={{ groups['brokers'][0] | extract(hostvars, 'ansible_host') }}:9092
+clusterB.bootstrap.servers={{ groups['brokers'][1] | extract(hostvars, 'ansible_host') }}:9092
+
+clusterA->clusterB.enabled=true
+clusterA->clusterB.topics=.*
+clusterA->clusterB.topics.blacklist=__.*
+
+# Internal topics
+tasks.max=10
+refresh.topics.enabled=true
+refresh.groups.enabled=true
+sync.topic.acls.enabled=false

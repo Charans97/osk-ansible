@@ -1,0 +1,7 @@
+---
+# Handler to restart Kafka Connect
+- name: restart kafka-connect
+  systemd:
+    name: kafka-connect
+    state: restarted
+    daemon_reload: yes
