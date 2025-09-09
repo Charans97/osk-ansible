@@ -49,6 +49,46 @@
     remote_src: no
     extra_opts: [--strip-components=1]
 
+# ---------------- SSL Section ----------------
+- name: Copy CA files
+  copy:
+    src: "{{ item }}"
+    dest: "{{ install_dir }}/config/"
+    mode: 0600
+  with_items:
+    - ca.crt
+    - ca.key
+  when: ssl.enabled | default(false)
+
+- name: Cleanup old keystore/truststore
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "{{ install_dir }}/config/kafka.keystore.jks"
+    - "{{ install_dir }}/config/kafka.truststore.jks"
+    - "{{ install_dir }}/config/kafka.csr"
+    - "{{ install_dir }}/config/cert-signed"
+    - "{{ install_dir }}/config/cert-file"
+  when: ssl.enabled | default(false)
+
+- name: Deploy SSL generation script
+  template:
+    src: ssl-generate.sh.j2
+    dest: "{{ install_dir }}/config/ssl-generate.sh"
+    mode: 0755
+  when: ssl.enabled | default(false)
+
+- name: Generate SSL keystore/truststore
+  command: "{{ install_dir }}/config/ssl-generate.sh"
+  environment:
+    JAVA_HOME: "{{ java_home }}"
+    PATH: "{{ java_home }}/bin:{{ ansible_env.PATH }}"
+  args:
+    chdir: "{{ install_dir }}/config"
+  when: ssl.enabled | default(false)
+
+
 # ---------------- Kafka Connect Configuration ----------------
 - name: Configure Kafka Connect distributed.properties
   template:
@@ -56,6 +96,56 @@
     dest: "{{ install_dir }}/config/connect-distributed.properties"
     mode: 0644
   notify: restart kafka-connect
+
+# ---------------- Kafka User & Permissions ----------------
+- name: Ensure kafka group exists
+  group:
+    name: kafka
+    state: present
+
+- name: Ensure kafka user exists
+  user:
+    name: kafka
+    group: kafka
+    shell: /bin/false
+    create_home: yes
+    system: yes
+    state: present
+
+- name: Change ownership of Kafka directories
+  file:
+    path: "{{ item }}"
+    owner: kafka
+    group: kafka
+    recurse: yes
+  loop:
+    - /opt/kafka
+    - /var/lib/kafka
+    - /var/log/kafka
+
+
+
+# ---------------- Debezium Oracle Plugin ----------------
+- name: Ensure plugins directory exists
+  file:
+    path: "{{ install_dir }}/plugins"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Copy Debezium Oracle connector tarball
+  copy:
+    src: debezium-connector-oracle-2.7.3.Final-plugin.tar.gz
+    dest: /tmp/debezium-oracle.tar.gz
+    mode: 0644
+
+- name: Extract Debezium Oracle connector
+  unarchive:
+    src: /tmp/debezium-oracle.tar.gz
+    dest: "{{ install_dir }}/plugins"
+    remote_src: yes
+
 
 # ---------------- Kafka Connect systemd Service ----------------
 - name: Configure Kafka Connect systemd service

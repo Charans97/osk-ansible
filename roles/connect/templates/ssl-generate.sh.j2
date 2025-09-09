@@ -1,0 +1,65 @@
+#!/bin/bash
+set -euo pipefail
+
+echo ">>> Using JAVA_HOME: ${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}"
+
+# Passwords
+CA_PASS="gini@321"
+KEYSTORE_PASS="changeit"
+TRUSTSTORE_PASS="changeit"
+
+HOSTNAME=$(hostname -f)
+CONFIG_DIR="/opt/kafka/config"
+KEYSTORE="$CONFIG_DIR/kafka.keystore.jks"
+TRUSTSTORE="$CONFIG_DIR/kafka.truststore.jks"
+CSR="$CONFIG_DIR/kafka.csr"
+SIGNED_CERT="$CONFIG_DIR/cert-signed.crt"
+SAN_FILE="$CONFIG_DIR/san.cnf"
+
+echo ">>> Generating SSL keystore and truststore for $HOSTNAME"
+
+# Cleanup old files
+rm -f "$KEYSTORE" "$TRUSTSTORE" "$CSR" "$SIGNED_CERT" "$SAN_FILE" "$CONFIG_DIR/ca.srl"
+
+# Generate SAN string dynamically from inventory
+SAN=""
+{% for host in groups['brokers'] %}
+SAN+="DNS:{{ host }},IP:{{ hostvars[host]['ansible_host'] }}{% if not loop.last %},{% endif %}"
+{% endfor %}
+
+echo ">>> Using SAN: $SAN"
+
+# Create SAN config file for OpenSSL
+cat > "$SAN_FILE" <<EOF
+[ v3_req ]
+subjectAltName = $SAN
+EOF
+
+# Generate keystore with keypair
+"$JAVA_HOME/bin/keytool" -genkeypair -alias kafka -keyalg RSA -keystore "$KEYSTORE" \
+  -storepass "$KEYSTORE_PASS" -keypass "$KEYSTORE_PASS" \
+  -dname "CN=$HOSTNAME, OU=Kafka, O=MyOrg, L=BLR, ST=KA, C=IN" \
+  -validity 365 -storetype PKCS12
+
+# Generate CSR from keystore
+"$JAVA_HOME/bin/keytool" -keystore "$KEYSTORE" -alias kafka -certreq -file "$CSR" \
+  -storepass "$KEYSTORE_PASS" -keypass "$KEYSTORE_PASS"
+
+# Sign certificate using CA and SAN
+openssl x509 -req -in "$CSR" -CA "$CONFIG_DIR/ca.crt" -CAkey "$CONFIG_DIR/ca.key" \
+  -out "$SIGNED_CERT" -days 365 -CAcreateserial -passin pass:"$CA_PASS" \
+  -extensions v3_req -extfile "$SAN_FILE"
+
+# Import CA cert into keystore
+"$JAVA_HOME/bin/keytool" -keystore "$KEYSTORE" -alias CARoot -import -file "$CONFIG_DIR/ca.crt" \
+  -storepass "$KEYSTORE_PASS" -noprompt
+
+# Import signed certificate into keystore
+"$JAVA_HOME/bin/keytool" -keystore "$KEYSTORE" -alias kafka -import -file "$SIGNED_CERT" \
+  -storepass "$KEYSTORE_PASS" -noprompt
+
+# Create truststore and import CA
+"$JAVA_HOME/bin/keytool" -keystore "$TRUSTSTORE" -alias CARoot -import -file "$CONFIG_DIR/ca.crt" \
+  -storepass "$TRUSTSTORE_PASS" -noprompt
+
+echo ">>> SSL keystore and truststore generated successfully!"

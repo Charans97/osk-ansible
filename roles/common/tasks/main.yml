@@ -96,6 +96,62 @@
   notify:
     - restart kafka
 
+# ---------------- Kafka User & Permissions ----------------
+- name: Ensure kafka group exists
+  group:
+    name: kafka
+    state: present
+
+- name: Ensure kafka user exists
+  user:
+    name: kafka
+    group: kafka
+    shell: /bin/false
+    create_home: yes
+    system: yes
+    state: present
+
+# ---------------- Directories ----------------
+- name: Ensure Kafka lib and log dirs exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: kafka
+    group: kafka
+    mode: 0755
+  loop:
+    - /var/lib/kafka
+    - /var/log/kafka
+
+# ---------------- Migration (only once) ----------------
+- name: Check if old log dir exists
+  stat:
+    path: /opt/kafka/logs
+  register: old_logs
+
+- name: Migrate Kafka data from /opt/kafka/logs to /var/lib/kafka
+  command: rsync -a /opt/kafka/logs/ /var/lib/kafka/
+  when: old_logs.stat.exists and old_logs.stat.isdir
+  become: yes
+
+- name: Remove old /opt/kafka/logs directory
+  file:
+    path: /opt/kafka/logs
+    state: absent
+  when: old_logs.stat.exists
+  become: yes
+
+- name: Change ownership of Kafka directories
+  file:
+    path: "{{ item }}"
+    owner: kafka
+    group: kafka
+    recurse: yes
+  loop:
+    - /opt/kafka
+    - /var/lib/kafka
+    - /var/log/kafka
+
 # ---------------- Systemd Section ----------------
 - name: Configure Kafka systemd service
   template:
@@ -108,63 +164,32 @@
   become: yes
 
 # ---------------- Cluster ID & Storage Formatting ----------------
-- name: Generate cluster.id (only on kafka1)
-  command: >
-    /opt/kafka/bin/kafka-storage.sh random-uuid
-  environment:
-    JAVA_HOME: "{{ java_home }}"
-    PATH: "{{ java_home }}/bin:{{ ansible_env.PATH }}"
-  register: cluster_id_result
-  delegate_to: kafka1
-  run_once: true
+- name: Check if cluster.id exists in meta.properties
+  command: grep '^cluster.id' /var/lib/kafka/meta.properties
+  register: meta_cluster_id
+  ignore_errors: yes
 
-- name: Save cluster.id to controller node
-  copy:
-    content: "{{ cluster_id_result.stdout }}"
-    dest: "/tmp/kafka-cluster-id"
-  delegate_to: kafka1
-  run_once: true
-
-# 2. Fetch cluster.id from kafka1 to controller
-- name: Fetch cluster.id to Ansible controller
-  fetch:
-    src: "/tmp/kafka-cluster-id"
-    dest: "/tmp/kafka-cluster-id"
-    flat: yes
-  delegate_to: kafka1
-  run_once: true
-
-# 3. Distribute cluster.id to all brokers
-- name: Copy cluster.id to all brokers
-  copy:
-    src: "/tmp/kafka-cluster-id"
-    dest: "/opt/kafka/cluster.id"
-
-# 4. Clean old metadata (optional, only if mismatch happens)
-- name: Clean old Kafka metadata logs
-  file:
-    path: "{{ install_dir }}/logs"
-    state: absent
-  when: wipe_metadata | default(false)
-
-# 5. Format storage with shared cluster.id
-# 5a. Read cluster.id into a fact
-- name: Read cluster.id
-  slurp:
-    src: /opt/kafka/cluster.id
-  register: cluster_id_file
-
-- name: Set cluster_id fact
+- name: Extract existing cluster.id
   set_fact:
-    cluster_id: "{{ cluster_id_file.content | b64decode | trim }}"
+    cluster_id: "{{ meta_cluster_id.stdout.split('=')[1] | trim }}"
+  when: meta_cluster_id.rc == 0
 
-# 5b. Format storage with shared cluster.id
+- name: Generate new cluster.id (only if no meta.properties found on first broker)
+  command: "{{ install_dir }}/bin/kafka-storage.sh random-uuid"
+  register: cluster_id_result
+  when: meta_cluster_id.rc != 0 and inventory_hostname == groups['brokers'][0]
+  run_once: true
+
+- name: Save cluster_id fact
+  set_fact:
+    cluster_id: "{{ cluster_id_result.stdout | default(cluster_id) }}"
+
 - name: Format Kafka storage directories
   command: >
-    /opt/kafka/bin/kafka-storage.sh format
+    {{ install_dir }}/bin/kafka-storage.sh format
     --ignore-formatted
     --cluster-id {{ cluster_id }}
-    -c /opt/kafka/config/server.properties
+    -c {{ install_dir }}/config/server.properties
   args:
     creates: "{{ install_dir }}/logs/__cluster_metadata-0"
   environment:
@@ -183,7 +208,8 @@
 - name: Deploy Kafka Connect
   include_tasks: connect.yml
   when: kafka_role == "connect"
+
 #..............mm2................
-- name: Deploy Kafka MirrorMaker2
-  include_tasks: mm2.yml
-  when: kafka_role == "mm2"
+#- name: Deploy Kafka MirrorMaker2
+#  include_tasks: mm2.yml
+#  when: kafka_role == "mm2"

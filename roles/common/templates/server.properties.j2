@@ -17,7 +17,7 @@ controller.quorum.voters={% for host in groups['brokers'] %}{{ loop.index }}@{{ 
 advertised.listeners=PLAINTEXT://{{ ansible_host }}:9092{% if ssl.enabled | default(false) %},SSL://{{ ansible_host }}:9094{% endif %}
 
 # Log dirs
-log.dirs={{ install_dir }}/logs
+log.dirs=/var/lib/kafka
 
 # Performance tuning
 num.network.threads=3
