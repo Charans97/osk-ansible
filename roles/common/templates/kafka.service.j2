@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=kafka
+Group=kafka
 Environment="JAVA_HOME={{ java_home }}"
 Environment="PATH={{ java_home }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 ExecStart={{ install_dir }}/bin/kafka-server-start.sh {{ install_dir }}/config/server.properties

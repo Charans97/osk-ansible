@@ -1,13 +1,22 @@
 # Bootstrap servers (Kafka brokers)
-bootstrap.servers={% for host in groups['brokers'] %}{{ hostvars[host].ansible_host }}:9092{% if not loop.last %},{% endif %}{% endfor %}
+bootstrap.servers={% for host in groups['brokers'] %}{{ hostvars[host].ansible_host }}:9094{% if not loop.last %},{% endif %}{% endfor %}
 
-# Key converter (can be changed to Avro if Schema Registry is used)
+# Converters for keys and values
 key.converter=org.apache.kafka.connect.json.JsonConverter
 key.converter.schemas.enable=false
 
-# Value converter
 value.converter=org.apache.kafka.connect.json.JsonConverter
 value.converter.schemas.enable=false
+
+# Converters for internal topics
+internal.key.converter=org.apache.kafka.connect.json.JsonConverter
+internal.value.converter=org.apache.kafka.connect.json.JsonConverter
+internal.key.converter.schemas.enable=false
+internal.value.converter.schemas.enable=false
+
+
+# Where to find connector plugins
+plugin.path={{ install_dir }}/plugins
 
 # Internal topics
 offset.storage.topic=connect-offsets
@@ -18,6 +27,15 @@ status.storage.topic=connect-status
 offset.storage.replication.factor=3
 config.storage.replication.factor=3
 status.storage.replication.factor=3
+
+# SSL Config (if enabled)
+
+security.protocol=SSL
+ssl.keystore.location={{ install_dir }}/config/kafka.keystore.jks
+ssl.keystore.password={{ ssl.keystore_password | default('changeit') }}
+ssl.key.password={{ ssl.key_password | default('changeit') }}
+ssl.truststore.location={{ install_dir }}/config/kafka.truststore.jks
+ssl.truststore.password={{ ssl.truststore_password | default('changeit') }}
 
 # Group ID
 group.id=connect-cluster
