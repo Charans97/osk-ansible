@@ -1,0 +1,15 @@
+# Kafka Controller properties
+process.roles=controller
+node.id={{ 1 + (groups['kafka_controllers'] | list).index(inventory_hostname) }}
+
+# Controller quorum voters (all controllers)
+controller.quorum.voters={% for n in groups['kafka_controllers'] %}{{ 1 + loop.index0 }}@{{ hostvars[n].ansible_host }}:9095{% if not loop.last %},{% endif %}{% endfor %}
+
+controller.listener.names=CONTROLLER
+
+# Controller listener
+listeners=CONTROLLER://{{ ansible_host }}:9095
+#listener.security.protocol.map=CONTROLLER:PLAINTEXT
+
+# Data directory (separate per controller)
+log.dirs={{ data_dir }}/controller

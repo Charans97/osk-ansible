@@ -1,0 +1,13 @@
+---
+- name: daemon-reload
+  command: systemctl daemon-reload
+
+- name: restart kafka-controller
+  systemd:
+    name: kafka-controller
+    state: restarted
+
+- name: restart kafka-broker
+  systemd:
+    name: kafka-broker
+    state: restarted

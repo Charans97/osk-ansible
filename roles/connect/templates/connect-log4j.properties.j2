@@ -1,0 +1,15 @@
+# Log4j configuration for Kafka Connect
+
+log4j.rootLogger=INFO, connectAppender
+
+log4j.appender.connectAppender=org.apache.log4j.RollingFileAppender
+log4j.appender.connectAppender.File={{ logs_dir }}/connect.log
+log4j.appender.connectAppender.layout=org.apache.log4j.PatternLayout
+log4j.appender.connectAppender.layout.ConversionPattern=[%d] %p %m (%c)%n
+log4j.appender.connectAppender.MaxFileSize=100MB
+log4j.appender.connectAppender.MaxBackupIndex=10
+
+# Suppress overly verbose logs
+log4j.logger.org.apache.zookeeper=ERROR
+log4j.logger.org.I0Itec.zkclient=ERROR
+log4j.logger.org.reflections=ERROR

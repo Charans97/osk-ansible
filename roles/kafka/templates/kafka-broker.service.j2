@@ -1,0 +1,20 @@
+[Unit]
+Description=Kafka Broker (KRaft)
+After=network.target
+
+[Service]
+Type=simple
+User={{ kafka_user }}
+Group={{ kafka_group }}
+Environment=KAFKA_HEAP_OPTS="-Xms6G -Xmx6G"
+ExecStart={{ base_dir }}/bin/kafka-server-start.sh {{ config_dir }}/broker.properties
+ExecStop={{ base_dir }}/bin/kafka-server-stop.sh
+Restart=on-failure
+RestartSec=10
+# send logs to journald, view with: journalctl -u kafka-broker
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

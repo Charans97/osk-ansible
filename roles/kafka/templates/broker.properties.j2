@@ -1,0 +1,42 @@
+# Kafka Broker properties
+process.roles=broker
+node.id={{ 101 + (groups['kafka_brokers'] | list).index(inventory_hostname) }}
+
+# Controller quorum voters
+controller.quorum.voters={% for n in groups['kafka_controllers'] %}{{ 1 + loop.index0 }}@{{ hostvars[n].ansible_host }}:9095{% if not loop.last %},{% endif %}{% endfor %}
+
+
+# Controller quorum bootstrap (brokers need to connect to controllers)
+controller.quorum.bootstrap.servers={% for n in groups['kafka_controllers'] %}{{ hostvars[n].ansible_host }}:9095{% if not loop.last %},{% endif %}{% endfor %}
+
+controller.listener.names=CONTROLLER
+
+# Broker listeners
+listeners=PLAINTEXT://{{ ansible_host }}:9092{% if ssl_enabled | default(false) %},SSL://{{ ansible_host }}:9094{% endif %}
+
+advertised.listeners=PLAINTEXT://{{ ansible_host }}:9092{% if ssl_enabled | default(false) %},SSL://{{ ansible_host }}:9094{% endif %}
+
+# Map listeners to security protocols
+listener.security.protocol.map=PLAINTEXT:PLAINTEXT{% if ssl_enabled | default(false) %},SSL:SSL{% endif %},CONTROLLER:PLAINTEXT
+
+# Inter-broker communication
+inter.broker.listener.name=PLAINTEXT
+
+# Data directory (separate per broker)
+log.dirs={{ data_dir }}/broker
+
+# Topic defaults
+num.partitions=3
+default.replication.factor=3
+auto.create.topics.enable=false
+unclean.leader.election.enable=false
+
+# Optional SSL configuration
+{% if ssl_enabled | default(false) %}
+ssl.keystore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
+ssl.keystore.password={{ keystore_pass }}
+ssl.key.password={{ keystore_pass }}
+ssl.truststore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.truststore.jks
+ssl.truststore.password={{ truststore_pass }}
+ssl.client.auth=required
+{% endif %}

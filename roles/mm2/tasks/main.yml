@@ -1,0 +1,28 @@
+---
+- name: Ensure mm2 config dir
+  file:
+    path: "{{ config_dir }}/mm2"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+
+- name: Deploy mm2 properties
+  template:
+    src: mm2.properties.j2
+    dest: "{{ config_dir }}/mm2/mm2.properties"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+
+- name: Deploy mm2 systemd unit
+  template:
+    src: mm2.service.j2
+    dest: /etc/systemd/system/kafka-mm2.service
+  notify:
+    - daemon-reload
+    - restart kafka-mm2
+
+- name: Ensure mm2 is running
+  systemd:
+    name: kafka-mm2
+    enabled: yes
+    state: started

@@ -1,0 +1,25 @@
+- hosts: all
+  become: yes
+  roles:
+    - prereqs
+    - security
+
+- hosts: kafka_controllers:kafka_brokers
+  become: yes
+  roles:
+    - kafka
+
+- hosts: kafka_connect
+  roles:
+    - connect
+
+# Optional: only if you have connect/mm2 nodes
+# - hosts: connect
+#   become: yes
+#   roles:
+#     - connect
+#
+# - hosts: mm2
+#   become: yes
+#   roles:
+#     - mm2

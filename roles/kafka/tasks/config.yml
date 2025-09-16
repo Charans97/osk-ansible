@@ -1,0 +1,83 @@
+- name: Set node_id dynamically
+  set_fact:
+    node_id: "{{ (groups['kafka_controllers'] + groups['kafka_brokers']).index(inventory_hostname) + 1 }}"
+
+- name: Ensure broker data directory exists
+  file:
+    path: "{{ data_dir }}/broker"
+    state: directory
+    owner: kafka
+    group: kafka
+    mode: '0755'
+
+- name: Ensure controller data directory exists
+  file:
+    path: "{{ data_dir }}/controller"
+    state: directory
+    owner: kafka
+    group: kafka
+    mode: '0755'
+
+# Clean old meta.properties only if fresh setup
+- name: Clean old broker metadata (first deployment only)
+  file:
+    path: "{{ data_dir }}/broker/meta.properties"
+    state: absent
+  when: clean_meta | default(false)
+
+- name: Clean old controller metadata (first deployment only)
+  file:
+    path: "{{ data_dir }}/controller/meta.properties"
+    state: absent
+  when: clean_meta | default(false)
+
+- name: Generate broker config
+  template:
+    src: broker.properties.j2
+    dest: "{{ config_dir }}/broker.properties"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0644'
+
+- name: Generate controller config
+  template:
+    src: kraft.properties.j2
+    dest: "{{ config_dir }}/kraft.properties"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0644'
+
+# ----------------------------
+# KRaft storage formatting
+# ----------------------------
+- name: Generate cluster UUID (only once, on first controller)
+  command: "/opt/kafka/bin/kafka-storage.sh random-uuid"
+  register: cluster_id_gen
+  run_once: true
+  delegate_to: "{{ groups['kafka_controllers'][0] }}"
+  changed_when: false
+
+- name: Set cluster_id fact for all hosts
+  set_fact:
+    cluster_id: "{{ cluster_id_gen.stdout }}"
+  run_once: true
+  delegate_to: "{{ groups['kafka_controllers'][0] }}"
+  delegate_facts: true
+
+- name: Format storage directory (controllers)
+  command: >
+    /opt/kafka/bin/kafka-storage.sh format
+    --config {{ config_dir }}/kraft.properties
+    --cluster-id {{ hostvars[groups['kafka_controllers'][0]].cluster_id }}
+  args:
+    creates: "{{ data_dir }}/controller/meta.properties"
+  when: inventory_hostname in groups['kafka_controllers']
+
+- name: Format storage directory (brokers)
+  command: >
+    /opt/kafka/bin/kafka-storage.sh format
+    --config {{ config_dir }}/broker.properties
+    --cluster-id {{ hostvars[groups['kafka_controllers'][0]].cluster_id }}
+  args:
+    creates: "{{ data_dir }}/broker/meta.properties"
+  when: inventory_hostname in groups['kafka_brokers']

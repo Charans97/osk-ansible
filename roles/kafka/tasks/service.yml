@@ -1,0 +1,58 @@
+---
+- name: Deploy kafka-controller systemd unit
+  template:
+    src: kafka-controller.service.j2
+    dest: /etc/systemd/system/kafka-controller.service
+  notify:
+    - daemon-reload
+    - restart kafka-controller
+
+- name: Deploy kafka-broker systemd unit
+  template:
+    src: kafka-broker.service.j2
+    dest: /etc/systemd/system/kafka-broker.service
+  notify:
+    - daemon-reload
+    - restart kafka-broker
+
+- name: Deploy node-specific log4j.properties for Kafka
+  template:
+    src: log4j.properties.j2
+    dest: /etc/kafka/configs/log4j.properties
+    owner: kafka
+    group: kafka
+    mode: '0644'
+  vars:
+    log_dir: /data/logs
+
+- name: Ensure controller service started
+  systemd:
+    name: kafka-controller
+    state: started
+    enabled: yes
+
+- name: Wait for controller quorum to be healthy
+  shell: >
+    /opt/kafka/bin/kafka-metadata-quorum.sh
+    --bootstrap-controller {{ hostvars[groups['kafka_controllers'][0]].ansible_host }}:9095
+    describe --status
+  register: quorum_status
+  retries: 10
+  delay: 6
+  until: "'LeaderId' in quorum_status.stdout"
+  run_once: true
+
+- name: Start Kafka brokers
+  systemd:
+    name: kafka-broker
+    state: started
+    enabled: true
+  when: inventory_hostname in groups['kafka_brokers']
+
+#- name: Wait for broker SSL port
+ # wait_for:
+  #  host: "{{ ansible_host }}"
+   # port: 9093
+    #delay: 5
+    #timeout: 60
+

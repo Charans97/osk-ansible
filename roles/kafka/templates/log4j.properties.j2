@@ -1,0 +1,29 @@
+# Root logger logs to console only
+log4j.rootLogger=INFO, CONSOLE
+
+# Console appender
+log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+log4j.appender.CONSOLE.layout=org.apache.log4j.PatternLayout
+log4j.appender.CONSOLE.layout.ConversionPattern=[%d] %p %m (%c)%n
+
+# Controller log file (node-specific)
+log4j.appender.CONTROLLERFILE=org.apache.log4j.RollingFileAppender
+log4j.appender.CONTROLLERFILE.File={{ log_dir }}/controller-{{ inventory_hostname }}.log
+log4j.appender.CONTROLLERFILE.MaxFileSize=100MB
+log4j.appender.CONTROLLERFILE.layout=org.apache.log4j.PatternLayout
+log4j.appender.CONTROLLERFILE.layout.ConversionPattern=[%d] %p %m (%c)%n
+
+# Broker log file (node-specific)
+log4j.appender.BROKERFILE=org.apache.log4j.RollingFileAppender
+log4j.appender.BROKERFILE.File={{ log_dir }}/broker-{{ inventory_hostname }}.log
+log4j.appender.BROKERFILE.MaxFileSize=100MB
+log4j.appender.BROKERFILE.layout=org.apache.log4j.PatternLayout
+log4j.appender.BROKERFILE.layout.ConversionPattern=[%d] %p %m (%c)%n
+
+# Assign loggers
+log4j.logger.kafka.controller=INFO, CONTROLLERFILE
+log4j.logger.kafka.raft=INFO, CONTROLLERFILE
+
+log4j.logger.kafka.server=INFO, BROKERFILE
+log4j.logger.kafka.network.RequestChannel=INFO, BROKERFILE
+log4j.logger.kafka.request.logger=INFO, BROKERFILE

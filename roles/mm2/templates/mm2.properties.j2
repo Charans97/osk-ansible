@@ -1,0 +1,17 @@
+clusters = primary, backup
+primary.bootstrap.servers={% for host in groups['kafka_brokers'] %}{{ hostvars[host].ansible_host }}:{% if ssl_enabled %}9093{% else %}9092{% endif %}{% if not loop.last %},{% endif %}{% endfor %}
+backup.bootstrap.servers=
+primary->backup.enabled = true
+primary->backup.topics = .*
+
+primary->backup.offset-syncs.topic.replication.factor=3
+primary->backup.checkpoints.topic.replication.factor=3
+
+{% if ssl_enabled %}
+primary.security.protocol=SSL
+primary.ssl.keystore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
+primary.ssl.keystore.password={{ keystore_pass }}
+primary.ssl.key.password={{ key_pass }}
+primary.ssl.truststore.location={{ config_dir }}/secrets/truststore.jks
+primary.ssl.truststore.password={{ truststore_pass }}
+{% endif %}

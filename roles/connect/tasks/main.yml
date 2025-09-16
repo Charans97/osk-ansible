@@ -1,0 +1,45 @@
+---
+- name: Ensure connect data dir
+  file:
+    path: "{{ data_dir }}/connect"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0755'
+
+- name: Deploy connect properties
+  template:
+    src: connect-distributed.properties.j2
+    dest: "{{ config_dir }}/connect-distributed.properties"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+
+- name: Deploy connect systemd unit
+  template:
+    src: connect.service.j2
+    dest: /etc/systemd/system/kafka-connect.service
+  notify:
+    - daemon-reload
+    - restart kafka-connect
+
+- name: Deploy connect log4j properties
+  template:
+    src: connect-log4j.properties.j2
+    dest: "{{ config_dir }}/connect-log4j.properties"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0644'
+  notify: restart kafka-connect
+
+
+- name: Ensure connect is running
+  systemd:
+    name: kafka-connect
+    enabled: yes
+    state: started
+
+- name: Wait for Connect REST
+  wait_for:
+    host: localhost
+    port: 8083
+    timeout: 30

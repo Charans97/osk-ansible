@@ -1,0 +1,9 @@
+---
+- name: Include kafka install tasks
+  include_tasks: install.yml
+
+- name: Include kafka config tasks
+  include_tasks: config.yml
+
+- name: Include kafka service tasks
+  include_tasks: service.yml

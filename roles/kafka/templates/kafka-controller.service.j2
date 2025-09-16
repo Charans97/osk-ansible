@@ -1,0 +1,19 @@
+[Unit]
+Description=Kafka Controller (KRaft)
+After=network.target
+
+[Service]
+Type=simple
+User={{ kafka_user }}
+Group={{ kafka_group }}
+Environment=KAFKA_HEAP_OPTS="-Xms1G -Xmx1G"
+ExecStart={{ base_dir }}/bin/kafka-server-start.sh {{ config_dir }}/kraft.properties
+Restart=on-failure
+RestartSec=10
+# send logs to journald, view with: journalctl -u kafka-controller
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

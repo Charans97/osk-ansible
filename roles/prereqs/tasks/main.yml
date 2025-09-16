@@ -1,0 +1,99 @@
+---
+- name: Ensure kafka group exists
+  group:
+    name: "{{ kafka_group }}"
+    state: present
+
+- name: Ensure kafka user exists
+  user:
+    name: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    create_home: no
+    shell: /sbin/nologin
+
+- name: Ensure base directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0755'
+  loop:
+    - "{{ base_dir }}"
+    - "{{ config_dir }}"
+    - "{{ ssl_dir }}"
+    - "{{ logs_dir }}"
+    - "/opt/binaries"
+  when: inventory_hostname in groups['kafka_controllers'] or inventory_hostname in groups['kafka_brokers']
+
+- name: Ensure data directories for controller and broker
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0755'
+  loop:
+    - "{{ '/data/kafkadata/controller' if inventory_hostname in groups['kafka_controllers'] else omit }}"
+    - "{{ '/data/kafkadata/broker' if inventory_hostname in groups['kafka_brokers'] else omit }}"
+  when: inventory_hostname in groups['kafka_controllers'] or inventory_hostname in groups['kafka_brokers']
+
+- name: Copy required tarballs and certs from role/files to target /tmp
+  copy:
+    src: "{{ item }}"
+    dest: "/tmp/{{ item | basename }}"
+    mode: '0644'
+  with_fileglob:
+    - "{{ role_path }}/files/*"
+
+- name: Extract Java tarball to /opt
+  unarchive:
+    src: "/tmp/openjdk-17.tar.gz"
+    dest: /opt
+    remote_src: yes
+  args:
+    creates: "/opt/jdk-17/bin/java"
+
+- name: Find extracted JDK directory under /opt
+  find:
+    paths: /opt
+    file_type: directory
+    patterns: "jdk-*"
+  register: jdk_dirs
+
+- name: Create java symlink dynamically
+  file:
+    src: "{{ item.path }}/bin/java"
+    dest: /usr/bin/java
+    state: link
+    force: yes
+  loop: "{{ jdk_dirs.files }}"
+  when: jdk_dirs.matched > 0
+
+- name: Detect JAVA_HOME dynamically
+  set_fact:
+    java_home: "{{ jdk_dirs.files[0].path }}"
+  when: jdk_dirs.matched > 0
+
+- name: Extract Kafka tarball to /opt/kafka
+  unarchive:
+    src: "/tmp/{{ lookup('env','KAFKA_TARBALL') | default('kafka_2.13-3.7.2.tgz') }}"
+    dest: /opt/kafka
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+  args:
+    creates: /opt/kafka/bin/kafka-server-start.sh
+
+- name: Ensure ownership on base_dir
+  file:
+    path: "{{ base_dir }}"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    recurse: yes
+
+- name: Populate /etc/hosts entries for kafka cluster
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ hostvars[item].ansible_host }} {{ item }}"
+    state: present
+  loop: "{{ (groups['kafka_controllers'] + groups['kafka_brokers']) | unique }}"

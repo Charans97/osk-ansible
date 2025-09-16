@@ -1,0 +1,8 @@
+---
+- name: daemon-reload
+  command: systemctl daemon-reload
+
+- name: restart kafka-connect
+  systemd:
+    name: kafka-connect
+    state: restarted

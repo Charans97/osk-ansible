@@ -1,0 +1,14 @@
+---
+#- name: Move default config files to config_dir (if present)
+#  command: >
+#    mv {{ base_dir }}/config/* {{ config_dir }}/
+#  args:
+#    removes: "{{ base_dir }}/config/server.properties"
+#  ignore_errors: true
+
+- name: Ensure base_dir ownership
+  file:
+    path: "{{ base_dir }}"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    recurse: yes

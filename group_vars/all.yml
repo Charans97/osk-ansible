@@ -1,0 +1,21 @@
+# Global defaults
+ssl_enabled: true
+clean_meta: false 
+keystore_pass: changeit
+truststore_pass: changeit
+key_pass: changeit
+kafka_user: kafka
+kafka_group: kafka
+ca_pass: "gini@321"
+
+
+# Paths
+base_dir: /opt/kafka
+config_dir: /etc/kafka/configs
+data_dir: /data/kafkadata
+logs_dir: /data/logs
+ssl_dir: /etc/kafka/ssl
+
+# Air-gap files expected under roles/prereqs/files/
+java_tarball: openjdk-17.tar.gz
+kafka_tarball: kafka_2.13-3.7.2.tgz

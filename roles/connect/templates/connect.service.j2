@@ -1,0 +1,16 @@
+[Unit]
+Description=Kafka Connect
+After=network.target kafka-controller.service kafka-broker.service
+
+[Service]
+User={{ kafka_user }}
+Group={{ kafka_group }}
+ExecStart={{ base_dir }}/bin/connect-distributed.sh {{ config_dir }}/connect-distributed.properties
+Environment="KAFKA_HEAP_OPTS=-Xms1G -Xmx1G"
+Environment="KAFKA_LOG4J_OPTS=-Dlog4j.configuration=file:{{ config_dir }}/connect-log4j.properties"
+Restart=on-failure
+#StandardOutput=append:{{ logs_dir }}/connect.out
+#StandardError=append:{{ logs_dir }}/connect.err
+
+[Install]
+WantedBy=multi-user.target
