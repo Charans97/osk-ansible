@@ -1,0 +1,6 @@
+- name: Deploy mm2 systemd unit
+  template:
+    src: mm2.service.j2
+    dest: /etc/systemd/system/kafka-mm2.service
+  notify:
+    - daemon-reload

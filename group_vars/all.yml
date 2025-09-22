@@ -1,8 +1,9 @@
 # Global defaults
 ssl_enabled: true
-clean_meta: false 
+clean_meta: true
 keystore_pass: changeit
 truststore_pass: changeit
+client_keystore_pass: changeit
 key_pass: changeit
 kafka_user: kafka
 kafka_group: kafka

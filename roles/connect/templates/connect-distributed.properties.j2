@@ -1,6 +1,6 @@
-#bootstrap.servers={% for host in groups['kafka_brokers'] %}{{ hostvars[host].ansible_host }}:{% if ssl_enabled %}9094{% else %}9092{% endif %}{% if not loop.last %},{% endif %}{% endfor %}
+bootstrap.servers={% for host in groups['kafka_brokers'] %}{{ hostvars[host].ansible_host }}:{% if ssl_enabled %}9094{% else %}9092{% endif %}{% if not loop.last %},{% endif %}{% endfor %}
 
-bootstrap.servers={% for host in groups['kafka_brokers'] %}{{ hostvars[host].ansible_host }}:9092{% if not loop.last %},{% endif %}{% endfor %}
+#bootstrap.servers={% for host in groups['kafka_brokers'] %}{{ hostvars[host].ansible_host }}:9092{% if not loop.last %},{% endif %}{% endfor %}
 
 
 group.id=connect-cluster
@@ -16,6 +16,8 @@ security.protocol=SSL
 ssl.keystore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
 ssl.keystore.password={{ keystore_pass }}
 ssl.key.password={{ key_pass }}
-ssl.truststore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.truststore.jks
+ssl.truststore.location={{ config_dir }}/secrets/kafka.truststore.jks
 ssl.truststore.password={{ truststore_pass }}
 {% endif %}
+
+plugin.path=/opt/kafka/connect-plugins

@@ -28,15 +28,21 @@ log.dirs={{ data_dir }}/broker
 # Topic defaults
 num.partitions=3
 default.replication.factor=3
-auto.create.topics.enable=false
+auto.create.topics.enable=true
 unclean.leader.election.enable=false
+
+# Retain logs for 6 months
+retention.ms=15552000000
+
+# Enable compression (LZ4 recommended)
+compression.type=lz4
 
 # Optional SSL configuration
 {% if ssl_enabled | default(false) %}
 ssl.keystore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
 ssl.keystore.password={{ keystore_pass }}
 ssl.key.password={{ keystore_pass }}
-ssl.truststore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.truststore.jks
+ssl.truststore.location={{ config_dir }}/secrets/kafka.truststore.jks
 ssl.truststore.password={{ truststore_pass }}
 ssl.client.auth=required
 {% endif %}

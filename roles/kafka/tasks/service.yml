@@ -1,4 +1,12 @@
 ---
+- name: Ensure OneAgent installer is executable
+  file:
+    path: /tmp/Dynatrace-OneAgent-Linux-x86-1.321.51.20250905-075429.sh
+    mode: '0755'
+
+- name: Install Dynatrace OneAgent
+  command: "sh /tmp/Dynatrace-OneAgent-Linux-x86-1.321.51.20250905-075429.sh --set-app-log-content-access=true"
+
 - name: Deploy kafka-controller systemd unit
   template:
     src: kafka-controller.service.j2
