@@ -1,17 +1,64 @@
-clusters = primary, backup
-primary.bootstrap.servers={% for host in groups['kafka_brokers'] %}{{ hostvars[host].ansible_host }}:{% if ssl_enabled %}9093{% else %}9092{% endif %}{% if not loop.last %},{% endif %}{% endfor %}
-backup.bootstrap.servers=
-primary->backup.enabled = true
-primary->backup.topics = .*
+# mm2-prod-dr.properties
+# --- cluster list ---
+clusters = prod, dr
 
-primary->backup.offset-syncs.topic.replication.factor=3
-primary->backup.checkpoints.topic.replication.factor=3
+# --- bootstrap servers for both clusters ---
+prod.bootstrap.servers = 172.16.16.162:9094,172.16.16.204:9094,172.16.16.152:9094
+dr.bootstrap.servers   = 172.16.16.140:9094,172.16.16.150:9094,172.16.16.170:9094
 
-{% if ssl_enabled %}
-primary.security.protocol=SSL
-primary.ssl.keystore.location={{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
-primary.ssl.keystore.password={{ keystore_pass }}
-primary.ssl.key.password={{ key_pass }}
-primary.ssl.truststore.location={{ config_dir }}/secrets/truststore.jks
-primary.ssl.truststore.password={{ truststore_pass }}
-{% endif %}
+# --- Kafka Connect internal topics (stored in the cluster used by the worker) ---
+config.storage.topic     = mm2-configs
+offset.storage.topic     = mm2-offsets
+status.storage.topic     = mm2-status
+config.storage.replication.factor = 3
+offset.storage.replication.factor = 3
+status.storage.replication.factor = 3
+
+# --- Converters (byte-copy, no schema conversion) ---
+key.converter = org.apache.kafka.connect.converters.ByteArrayConverter
+value.converter = org.apache.kafka.connect.converters.ByteArrayConverter
+
+# --- MirrorMaker behaviour ---
+tasks.max = 4
+replication.policy.class = org.apache.kafka.connect.mirror.IdentityReplicationPolicy
+
+# --- Enable prod -> dr only (disable reverse) ---
+prod->dr.enabled = true
+prod->dr.topics  = .*
+prod->dr.topics.exclude = mm2.*.internal,.*.replica,__.*
+
+dr->prod.enabled = false
+
+# --- MM2 housekeeping & sync settings ---
+emit.heartbeats.enabled = true
+emit.heartbeats.interval.seconds = 30
+heartbeats.topic.replication.factor = 3
+
+emit.checkpoints.enabled = true
+emit.checkpoints.interval.seconds = 60
+checkpoints.topic.replication.factor = 3
+
+sync.topic.configs.interval.seconds = 600
+sync.group.offsets.interval.seconds = 60
+
+##############################
+# Security (mTLS) per cluster
+##############################
+
+# ---- PROD cluster ----
+prod.security.protocol = SSL
+prod.ssl.truststore.location = /etc/kafka/configs/secrets/prod-kafka.truststore.jks
+prod.ssl.truststore.password = changeit
+prod.ssl.keystore.location = /etc/kafka/configs/secrets/prod-client.keystore.jks
+prod.ssl.keystore.password = changeit
+prod.ssl.key.password = changeit
+prod.ssl.endpoint.identification.algorithm =
+
+# ---- DR cluster ----
+dr.security.protocol = SSL
+dr.ssl.truststore.location = /etc/kafka/configs/secrets/kafka.truststore.jks
+dr.ssl.truststore.password = changeit
+dr.ssl.keystore.location = /etc/kafka/configs/secrets/client.keystore.jks
+dr.ssl.keystore.password = changeit
+dr.ssl.key.password = changeit
+dr.ssl.endpoint.identification.algorithm =

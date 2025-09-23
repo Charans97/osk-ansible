@@ -1,16 +1,16 @@
 [Unit]
-Description=Kafka MirrorMaker2 (MM2)
-After=network.target kafka-controller.service kafka-broker.service
+Description=Kafka MirrorMaker2
+After=network.target kafka-broker.service
 
 [Service]
 User={{ kafka_user }}
 Group={{ kafka_group }}
 ExecStart={{ base_dir }}/bin/connect-mirror-maker.sh {{ config_dir }}/mm2/mm2.properties
-Environment="KAFKA_HEAP_OPTS=-Xms8G -Xmx8G"
+Environment="KAFKA_HEAP_OPTS=-Xms2G -Xmx2G"
+Environment="KAFKA_OPTS=-Dlog4j.configuration=file:{{ config_dir }}/mm2/log4j2-mm2.properties"
 Restart=on-failure
-RestartSec=10
-StandardOutput=append:{{ logs_dir }}/mm2.out
-StandardError=append:{{ logs_dir }}/mm2.err
+StandardOutput=null
+StandardError=null
 
 [Install]
 WantedBy=multi-user.target

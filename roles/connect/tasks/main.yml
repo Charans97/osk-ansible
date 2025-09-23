@@ -7,6 +7,45 @@
     group: "{{ kafka_group }}"
     mode: '0755'
 
+- name: Ensure connector plugin directory exists
+  file:
+    path: "{{ base_dir }}/connect-plugins"
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+
+- name: Ensure Kafka Connect plugin directory exists
+  file:
+    path: /opt/kafka/connect-plugins
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0755'
+
+- name: Copy all connector plugin tar.gz files to the node
+  copy:
+    src: "plugins/{{ item }}"
+    dest: /opt/kafka/connect-plugins/{{ item }}
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+  loop: "{{ lookup('fileglob', 'roles/connect/files/plugins/*.tar.gz', wantlist=True) | map('basename') | list }}"
+
+- name: Extract all connector plugin tar.gz files
+  unarchive:
+    src: /opt/kafka/connect-plugins/{{ item }}
+    dest: /opt/kafka/connect-plugins/
+    remote_src: yes
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+  loop: "{{ lookup('fileglob', 'roles/connect/files/plugins/*.tar.gz', wantlist=True) | map('basename') | list }}"
+
+- name: Remove plugin tar.gz files after extraction
+  file:
+    path: /opt/kafka/connect-plugins/{{ item }}
+    state: absent
+  loop: "{{ lookup('fileglob', 'roles/connect/files/plugins/*.tar.gz', wantlist=True) | map('basename') | list }}"
+
+
 - name: Deploy connect properties
   template:
     src: connect-distributed.properties.j2

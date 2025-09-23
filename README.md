@@ -7,9 +7,12 @@ Usage:
    - jdk-17_linux-x64_bin.tar.gz
    - ca.crt
    - ca.key
+   - dybatrace_agent.sh
 3. Edit inventory/hosts.yml (only file you need to change)
-4. Run:
-   ansible-playbook -i inventory/hosts.yml playbooks/site.yml
+4. Put your connect plugin tarballs into roles/connect/files/plugins/:
+5. Place dynatrace agent in files, also change the dynatrace file name in roles/kafka/tasks/service.yaml
+6. Run:
+   ansible-playbook -i inventory/hosts.yml site.yml
 
 Notes:
 - Designed for air-gapped installs. No external package downloads.

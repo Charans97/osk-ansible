@@ -19,7 +19,6 @@
 #   roles:
 #     - connect
 #
-# - hosts: mm2
-#   become: yes
-#   roles:
-#     - mm2
+- hosts: mm2
+  roles:
+    - mm2

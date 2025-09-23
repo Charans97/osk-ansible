@@ -75,14 +75,29 @@
     java_home: "{{ jdk_dirs.files[0].path }}"
   when: jdk_dirs.matched > 0
 
+- name: Ensure /opt/kafka directory exists
+  file:
+    path: /opt/kafka
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0755'
+
+- name: Find Kafka tarball in /tmp
+  find:
+    paths: /tmp
+    patterns: "kafka_*.tgz"
+  register: kafka_tarball
+
 - name: Extract Kafka tarball to /opt/kafka
   unarchive:
-    src: "/tmp/{{ lookup('env','KAFKA_TARBALL') | default('kafka_2.13-3.7.2.tgz') }}"
+    src: "{{ kafka_tarball.files[0].path }}"
     dest: /opt/kafka
     remote_src: yes
     extra_opts: [--strip-components=1]
   args:
     creates: /opt/kafka/bin/kafka-server-start.sh
+
 
 - name: Ensure ownership on base_dir
   file:

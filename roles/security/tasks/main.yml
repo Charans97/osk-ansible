@@ -1,5 +1,5 @@
 ---
-# ===================== Security Role =====================
+# ===================== Security Role (mTLS enabled) =====================
 
 - name: Ensure openssl is available
   command: openssl version
@@ -7,9 +7,7 @@
   changed_when: false
   ignore_errors: true
 
-# ---------------------------------------------------------
-# Directories
-# ---------------------------------------------------------
+# ---------------- Directories ----------------
 - name: Ensure secrets directory exists
   file:
     path: "{{ config_dir }}/secrets"
@@ -18,6 +16,7 @@
     group: "{{ kafka_group }}"
     mode: '0750'
 
+# ---------------- Clean old SSL files ----------------
 - name: Cleanup old SSL files
   file:
     path: "{{ item }}"
@@ -27,11 +26,11 @@
     - "{{ config_dir }}/secrets/{{ inventory_hostname }}.csr"
     - "{{ config_dir }}/secrets/{{ inventory_hostname }}-signed.crt"
     - "{{ config_dir }}/secrets/san.cnf"
-    - "{{ config_dir }}/secrets/ca.srl"
+    - "{{ config_dir }}/secrets/client.keystore.jks"
+    - "{{ config_dir }}/secrets/client.csr"
+    - "{{ config_dir }}/secrets/client-signed.crt"
 
-# ---------------------------------------------------------
-# SAN generation per node
-# ---------------------------------------------------------
+# ---------------- SAN Generation ----------------
 - name: Generate SAN config file per node
   copy:
     dest: "{{ config_dir }}/secrets/san.cnf"
@@ -56,10 +55,8 @@
     group: "{{ kafka_group }}"
     mode: '0644'
 
-# ---------------------------------------------------------
-# Keystore + CSR
-# ---------------------------------------------------------
-- name: Generate keystore with keypair
+# ---------------- Server Keystore + CSR ----------------
+- name: Generate keystore with server keypair
   command: >
     {{ java_home }}/bin/keytool -genkeypair -alias kafka -keyalg RSA
     -keystore {{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
@@ -69,7 +66,7 @@
   args:
     creates: "{{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks"
 
-- name: Generate CSR from keystore
+- name: Generate CSR from server keystore
   command: >
     {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
     -alias kafka -certreq -file {{ config_dir }}/secrets/{{ inventory_hostname }}.csr
@@ -77,10 +74,27 @@
   args:
     creates: "{{ config_dir }}/secrets/{{ inventory_hostname }}.csr"
 
-# ---------------------------------------------------------
-# CA copy
-# ---------------------------------------------------------
-- name: Copy CA certificate and key to target
+# ---------------- Client Keystore + CSR (shared) ----------------
+- name: Generate common client keystore
+  command: >
+    {{ java_home }}/bin/keytool -genkeypair -alias kafka-client -keyalg RSA
+    -keystore {{ config_dir }}/secrets/client.keystore.jks
+    -storepass {{ client_keystore_pass }} -keypass {{ client_keystore_pass }}
+    -dname "CN=kafka-client, OU=Kafka, O=MyOrg, L=BLR, ST=KA, C=IN"
+    -validity 365 -storetype PKCS12
+  args:
+    creates: "{{ config_dir }}/secrets/client.keystore.jks"
+
+- name: Generate CSR from common client keystore
+  command: >
+    {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/client.keystore.jks
+    -alias kafka-client -certreq -file {{ config_dir }}/secrets/client.csr
+    -storepass {{ client_keystore_pass }} -keypass {{ client_keystore_pass }}
+  args:
+    creates: "{{ config_dir }}/secrets/client.csr"
+
+# ---------------- CA copy ----------------
+- name: Copy CA cert and key
   copy:
     src: "../../prereqs/files/{{ item }}"
     dest: "{{ config_dir }}/secrets/"
@@ -91,10 +105,8 @@
     - ca.crt
     - ca.key
 
-# ---------------------------------------------------------
-# Sign per-node cert
-# ---------------------------------------------------------
-- name: Sign CSR using CA with SAN
+# ---------------- Sign Server + Client CSR ----------------
+- name: Sign server CSR using CA with SAN
   command: >
     openssl x509 -req -in {{ config_dir }}/secrets/{{ inventory_hostname }}.csr
     -CA {{ config_dir }}/secrets/ca.crt -CAkey {{ config_dir }}/secrets/ca.key
@@ -103,39 +115,72 @@
   args:
     creates: "{{ config_dir }}/secrets/{{ inventory_hostname }}-signed.crt"
 
-# ---------------------------------------------------------
-# Import certs into keystore
-# ---------------------------------------------------------
-- name: Import CA cert into keystore
+- name: Sign common client CSR using CA
+  command: >
+    openssl x509 -req -in {{ config_dir }}/secrets/client.csr
+    -CA {{ config_dir }}/secrets/ca.crt -CAkey {{ config_dir }}/secrets/ca.key
+    -out {{ config_dir }}/secrets/client-signed.crt -days 365 -CAcreateserial
+    -passin pass:{{ ca_pass }} -extensions v3_req -extfile {{ config_dir }}/secrets/san.cnf
+  args:
+    creates: "{{ config_dir }}/secrets/client-signed.crt"
+
+# ---------------- Import into Keystores ----------------
+- name: Import CA cert into server keystore
   command: >
     {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
     -alias CARoot -import -file {{ config_dir }}/secrets/ca.crt
     -storepass {{ keystore_pass }} -noprompt
   ignore_errors: yes
 
-- name: Import signed cert into keystore
+- name: Import signed server cert into keystore
   command: >
     {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/{{ inventory_hostname }}.keystore.jks
     -alias kafka -import -file {{ config_dir }}/secrets/{{ inventory_hostname }}-signed.crt
     -storepass {{ keystore_pass }} -noprompt
 
-# ---------------------------------------------------------
-# Truststore
-# ---------------------------------------------------------
-- name: Create truststore and import CA
+- name: Import CA cert into common client keystore
   command: >
-    {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/{{ inventory_hostname }}.truststore.jks
+    {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/client.keystore.jks
+    -alias CARoot -import -file {{ config_dir }}/secrets/ca.crt
+    -storepass {{ client_keystore_pass }} -noprompt
+  ignore_errors: yes
+
+- name: Import signed client cert into common keystore
+  command: >
+    {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/client.keystore.jks
+    -alias kafka-client -import -file {{ config_dir }}/secrets/client-signed.crt
+    -storepass {{ client_keystore_pass }} -noprompt
+
+# ---------------- Shared Truststore ----------------
+- name: Create common truststore and import CA
+  command: >
+    {{ java_home }}/bin/keytool -keystore {{ config_dir }}/secrets/kafka.truststore.jks
     -alias CARoot -import -file {{ config_dir }}/secrets/ca.crt
     -storepass {{ truststore_pass }} -noprompt
   args:
-    creates: "{{ config_dir }}/secrets/{{ inventory_hostname }}.truststore.jks"
+    creates: "{{ config_dir }}/secrets/kafka.truststore.jks"
 
-# ---------------------------------------------------------
-# Ownership
-# ---------------------------------------------------------
+# ---------------- Ownership ----------------
 - name: Ensure ownership on secrets dir
   file:
     path: "{{ config_dir }}/secrets"
     owner: "{{ kafka_user }}"
     group: "{{ kafka_group }}"
     recurse: yes
+
+- name: Ensure /data directory exists
+  file:
+    path: /data
+    state: directory
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0755'
+
+- name: Deploy client.properties file
+  template:
+    src: client.properties.j2
+    dest: /data/client.properties
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+    mode: '0640'
+

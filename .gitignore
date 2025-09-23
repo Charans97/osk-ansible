@@ -1,0 +1,4 @@
+# Ignore large binaries
+roles/prereqs/files/kafka_2.13-3.7.2.tgz
+roles/prereqs/files/openjdk-17.tar.gz
+roles/connect/files/plugins/debezium-connector-oracle-2.7.3.Final-plugin.tar.gz

@@ -13,6 +13,13 @@
     owner: "{{ kafka_user }}"
     group: "{{ kafka_group }}"
 
+- name: Deploy log4j config for MM2
+  template:
+    src: log4j2-mm2.properties.j2
+    dest: "{{ config_dir }}/mm2/log4j2-mm2.properties"
+    owner: "{{ kafka_user }}"
+    group: "{{ kafka_group }}"
+
 - name: Deploy mm2 systemd unit
   template:
     src: mm2.service.j2
@@ -21,8 +28,8 @@
     - daemon-reload
     - restart kafka-mm2
 
-- name: Ensure mm2 is running
+- name: Ensure mm2 is enabled but not started
   systemd:
     name: kafka-mm2
     enabled: yes
-    state: started
+    state: stopped
